@@ -14,26 +14,36 @@ from mpl_toolkits.mplot3d import Axes3D
 
 def args_gestion():
     parser = argparse.ArgumentParser(description="Script to identify TO clusters size and position along the MD trajectory.")
-    parser.add_argument("-f", "--traj", help = "Trajectory (all formats accepted by MDAnalysis)", required = True,  type=str)
+    parser.add_argument("-f", "--traj", help = "Trajectory (all formats accepted by MDAnalysis)", required = True,  type=str, metavar = "FILE")
     parser.add_argument("-s", "--topo", help = "Topology (all formats accepted by MDAnalysis)", required = True, metavar ="FILE", type=str)
     parser.add_argument("-o", "--outdir", help = "Output directory (default : .)", default=".", metavar = "DIR", type=str)
     parser.add_argument("-p", "--prefix", help = "Output prefix (default : Trajectory file name)", metavar = "STR", type=str)
     parser.add_argument("-t", "--threshold", help = "Threshold for clustering (default : 13)", metavar = "NUMBER", type=float, default=13)
     parser.add_argument("-n", "--to-keep", help = "Number of largest clusters to keep for the results report (default : 2)", metavar = "NUMBER", type=int, default = 2)
-    parser.add_argument("--frames", help = "Number of frames to process (default : all)", metavar = "NUMBER", type = int, default=0)
     parser.add_argument("-m", "--method", help = "Method for clusters correspondance through frames (residue or position)", type=str, default = "residue", choices=['residue', 'position'])
+    parser.add_argument("-c", "--nb-corr", help = "Number of largest clusters to take into account for clusters correspondance at time t (default : number of clusters to keep, -1 for all)", type = int, metavar = "NUMBER")
+    parser.add_argument("--frames", help = "Number of frames to process (default : all)", metavar = "NUMBER", type = int, default=0)
+
     args = parser.parse_args()
 
     if not args.prefix :
         args.prefix = ".".join(args.traj.split("/")[-1].split(".")[:-1]) # Get trajectory file name without all directories path and without file extension.
+
+    if not args.nb_corr :
+        args.nb_corr = args.to_keep
+
+    if args.nb_corr != -1 and args.nb_corr < args.to_keep : 
+        logging.error("Number of clusters for correspondance calculation (-c/--nb-corr) can't be lower than number of clusters to keep (-n/--to-keep).")
+        exit()
     
     return args
 
-def plot_size(out_prefix, clusters):
-    """Plot clusters size results for the first X clusters (X is given by user), with one line per cluster. 
+def plot_size(out_prefix:str, clusters:molecules_aggregate.clusters.ClusterIterator):
+    """Plot size of clusters provided in ClusterIterator through time
 
     Args:
-        out_prefix ([type]): The prefix for output image name. 
+        out_prefix (str): prefix for output png file
+        clusters (molecules_aggregate.clusters.ClusterIterator): ClusterIterator object given by molecule_aggregate.load_clusters()
     """
 
     fig, ax = plt.subplots()
@@ -49,7 +59,13 @@ def plot_size(out_prefix, clusters):
     
     fig.savefig(f"{out_prefix}_size_clusters.png")
 
-def plot_com(out_prefix, clusters):
+def plot_com(out_prefix:str, clusters:molecules_aggregate.clusters.ClusterIterator):
+    """Plot absolute center of masses of clusters for all frames along x,y and z axis on "3d" plot. 
+
+    Args:
+        out_prefix (str): prefix for output png file
+        clusters (molecules_aggregate.clusters.ClusterIterator): ClusterIterator object given by molecule_aggregate.load_clusters()
+    """
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
     ax.set_title(f"Absolute center of mass of clusters ({ARGS.method} for cluster correspondance)")
@@ -62,20 +78,31 @@ def plot_com(out_prefix, clusters):
     for cluster_frames in clusters:
         ax.scatter([c.center_of_mass[0] for c in cluster_frames], [c.center_of_mass[1] for c in cluster_frames], [c.center_of_mass[2] for c in cluster_frames], label =  f"Cluster {cluster_frames[0].idx}", alpha = 0.1, s=1, depthshade = False)
 
-    ax.legend(loc="center left")
+    leg = ax.legend(loc="center left")
+    for lh in leg.legendHandles:
+        lh.set_alpha(1)
+        lh.set_sizes([10])
     fig.savefig(f"{out_prefix}_absolute_com.png")  
 
-def plot_2d(out_prefix, clusters):
+def plot_2d(out_prefix:str, clusters:molecules_aggregate.clusters.ClusterIterator):
+    """Plot absolute center of masses of clusters for all frames with 2d projection along xz, yx and yz axis. 
+
+    Args:
+        out_prefix (str): prefix for output png file
+        clusters (molecules_aggregate.clusters.ClusterIterator): ClusterIterator object given by molecule_aggregate.load_clusters()
+    """
     fig, ax = plt.subplots()
     ax.set_title(f"Absolute center of mass of clusters. Projection through x/z axis. ({ARGS.method} for cluster correspondance)")
     ax.set_xlim(0,system.dimensions[0])
     ax.set_ylim(0,system.dimensions[2])
     ax.set_xlabel("x")
     ax.set_ylabel("z")
-    for cluster_frames in clusters:
-        ax.scatter([c.center_of_mass[0] for c in cluster_frames], [c.center_of_mass[2] for c in cluster_frames], s = 10, label =  f"Cluster {cluster_frames[0].idx}")
     
-    ax.legend()
+    for cluster_frames in clusters:
+        ax.scatter([c.center_of_mass[0] for c in cluster_frames], [c.center_of_mass[2] for c in cluster_frames], s = 10, label =  f"Cluster {cluster_frames[0].idx}", alpha = 0.1)
+    
+    leg = ax.legend()
+    [lh.set_alpha(1) for lh in leg.legendHandles]
     fig.savefig(f"{out_prefix}_xz.png")
 
     fig, ax = plt.subplots()
@@ -85,8 +112,9 @@ def plot_2d(out_prefix, clusters):
     ax.set_xlabel("y")
     ax.set_ylabel("x")
     for cluster_frames in clusters:
-        ax.scatter([c.center_of_mass[1] for c in cluster_frames], [c.center_of_mass[0] for c in cluster_frames], s = 10, label =  f"Cluster {cluster_frames[0].idx}")
-    ax.legend()
+        ax.scatter([c.center_of_mass[1] for c in cluster_frames], [c.center_of_mass[0] for c in cluster_frames], s = 10, label =  f"Cluster {cluster_frames[0].idx}", alpha = 0.1)
+    leg = ax.legend()
+    [lh.set_alpha(1) for lh in leg.legendHandles]
     fig.savefig(f"{out_prefix}_yx.png")
 
     fig, ax = plt.subplots()
@@ -96,7 +124,9 @@ def plot_2d(out_prefix, clusters):
     ax.set_xlabel("y")
     ax.set_ylabel("z")
     for cluster_frames in clusters:
-        ax.scatter([c.center_of_mass[1] for c in cluster_frames], [c.center_of_mass[2] for c in cluster_frames], s = 10, label =  f"Cluster {cluster_frames[0].idx}")
+        ax.scatter([c.center_of_mass[1] for c in cluster_frames], [c.center_of_mass[2] for c in cluster_frames], s = 10, label =  f"Cluster {cluster_frames[0].idx}", alpha = 0.1)
+    leg = ax.legend()
+    [lh.set_alpha(1) for lh in leg.legendHandles]
     fig.savefig(f"{out_prefix}_yz.png")
 
 def plot_z_membrane(out_prefix, membrane):
@@ -117,11 +147,13 @@ if __name__ == "__main__":
     system = mda.Universe(ARGS.topo, ARGS.traj)
     logging.info("Compute clusters through all frames...")
 
+    #This lines are for profiling the time
     '''pr = cProfile.Profile()
     pr.enable()'''
 
-    clusters = molecules_aggregate.load_clusters(system, "TO", ARGS.threshold, ARGS.to_keep, ARGS.frames, ARGS.method)
+    clusters = molecules_aggregate.load_clusters(system, "TO", ARGS.threshold, ARGS.to_keep, ARGS.frames, ARGS.method, ARGS.nb_corr)
 
+    #This lines are for profiling the time
     '''pr.disable()
     s = io.StringIO()
     sortby = SortKey.CUMULATIVE
