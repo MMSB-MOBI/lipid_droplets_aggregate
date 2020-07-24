@@ -1,0 +1,2 @@
+mdanalysis
+matplotlib=3.2.2
