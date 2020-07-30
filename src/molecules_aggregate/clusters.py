@@ -3,8 +3,9 @@ from MDAnalysis.lib import distances
 from typing import List, Dict, Set
 import numpy as np
 import copy
+import asyncio
 
-class Cluster:
+class Cluster_bak:
     """A class that stores cluster for 1 frame"""
 
     def __init__(self, system, residues, atom_group, idx = None, com = True):
@@ -35,6 +36,129 @@ class Cluster:
     @property
     def size(self):
         return len(self.residues)
+
+class Cluster:
+    def __init__(self, parent_system, residues, idx = None):
+        self.parent_system = parent_system
+        self.residues = residues
+        self.idx = idx
+        self.center_of_mass = self._center_of_mass()
+
+    def _center_of_mass(self):
+        atoms = self.parent_system.cluster_atom_group[list(self.residues)].atoms
+        return atoms.center_of_mass()
+
+    @property
+    def z_position_relative_to_membrane(self):  
+        return self.parent_system.membrane.highest_z_mean - self.center_of_mass[2]
+
+    @property
+    def size(self):
+        return len(self.residues)
+        
+
+class OneFrameClusters:
+    def __init__(self, parent_system):
+        self.parent_system = parent_system
+        self.clusters_list = self._load_clusters()
+
+    @property
+    def frame(self):
+        return self.parent_system.frame
+        
+    def _load_clusters(self):
+        clusters = compute_clusters(self.parent_system.box_dimension, self.parent_system.cluster_atom_group, self.parent_system.cluster_threshold)
+
+        if self.parent_system.previous: 
+            clusters_obj = self.make_correspondance_by_position(clusters)
+        else:
+            clusters_obj = [Cluster(self.parent_system, residues, i) for i,residues in enumerate(clusters[:self.parent_system.to_keep_clusters])]
+        
+        return clusters_obj
+
+    #def __repr__(self):
+    #    return str(self.clusters_list)    
+
+    #def __iter__(self):
+    #    return iter(self.clusters_list)
+
+    def __getitem__(self, i):
+        return self.clusters_list[i]
+
+    def __len__(self):
+        return len(self.clusters_list)
+
+    def make_correspondance_by_residues(self, new_clusters_residues):
+        """Compute correspondance between current clusters at time t and previous clusters at time t -1 with residue method. 
+        For each cluster at time t-1, a common percentage is computed between current clusters. This common percentage is the number of common residues over length of the largest cluster. The cluster with highest common percentage is assigned to corresponding t-1 cluster. 
+
+        Args:
+            new_clusters (List[List[Cluster]]): Current clusters
+            frame_nb (int): Current frame
+            system (MDAnalysis.universe.Universe): MDAnalysis universe
+        """
+
+        previous_clusters = [c.residues for c in self.parent_system.previous.clusters]
+        reordered_new_clusters = []
+        for i,res_list in enumerate(previous_clusters):
+            max_perc = 0
+            closest_cluster_idx = -1
+            for j, new_res_list in enumerate(new_clusters_residues):
+                common_perc = len(res_list.intersection(new_res_list)) / max(len(res_list), len(new_res_list))
+                if common_perc > max_perc : 
+                    max_perc = common_perc 
+                    closest_cluster_idx = j
+            if closest_cluster_idx == -1:
+                logging.error("No closest cluster found")
+                exit()
+
+            closest_cluster = Cluster(self.parent_system, new_clusters_residues[closest_cluster_idx], i) 
+            reordered_new_clusters.append(closest_cluster)
+
+        return reordered_new_clusters
+
+    def make_correspondance_by_position(self, new_clusters_residues):
+        """Compute correspondance between current clusters at time t and previous clusters at time t -1 with position method. 
+        For each cluster at time t-1, the distance (based on center of mass) with current clusters is computed with MDAnalysis functions. The cluster with closest distance is assigned to corresponding t-1 cluster.
+
+        Args:
+            new_clusters (List[List[Cluster]]): Current clusters
+            frame_nb (int): Current frame
+            system (MDAnalysis.universe.Universe): MDAnalysis universe
+        """
+        com_prev = np.array([c.center_of_mass for c in self.parent_system.previous.clusters])
+        
+        #Create tmp clusters to have center of mass calculation 
+        tmp_clusters = [Cluster(self.parent_system, residues) for residues in new_clusters_residues]
+        com_curr = np.array([c.center_of_mass for c in tmp_clusters])
+
+        print(tmp_clusters[207].size)
+        print(com_prev)
+        print(com_curr[207])
+
+        dist_matrix = distances.distance_array(com_prev, com_curr)
+
+        #print(len(dist_matrix))
+        
+        new_clusters = []
+        #assigned = set()
+        for i, dist in enumerate(dist_matrix):
+            #print(i, dist)
+            closest_cluster_idx = np.where(dist == min(dist))[0]
+            #print(i, closest_cluster_idx)
+            #print(dist[207])
+            if len(closest_cluster_idx) > 1:
+                logging.warn(f"Frame {frame_nb}. More than one same center of mass distance for cluster {i} correspondance. Assign the first.")
+    
+            closest_cluster = tmp_clusters[closest_cluster_idx[0]]
+            closest_cluster.idx = i
+
+            new_clusters.append(closest_cluster)
+
+        return new_clusters
+
+            
+
 
 
 class ClusterIterator:
@@ -105,7 +229,7 @@ class ClusterIterator:
             cluster_correspondance (str : residue|position): Method for cluster correspondance between time t and t-1
             nb_corr (int): Number of clusters to look at for cluster correspondance
         """
-        if frames_to_process == 0:
+        if frames_to_process == -1:
             frames = system.trajectory[1:]
         else:
             frames = system.trajectory[1:frames_to_process + 1]
@@ -178,7 +302,7 @@ class ClusterIterator:
             closest_cluster.idx = i
             self.clusters[i].append(closest_cluster)
 
-def compute_clusters(system, mol_group, threshold):
+def compute_clusters(box_dimension, mol_group, threshold):
     """Compute clusters.
     Center of mass is computed for each TO (or other molecule if other is given) residue. Then neighborhood is computed with MDAnalysis function and this neighborhood is reformated to have direct access to the list of neighbors for each residue, and clustering is done from these lists with clustering() function.  
 
@@ -191,7 +315,7 @@ def compute_clusters(system, mol_group, threshold):
         List[Set[int]]: The list of all clusters, each element of the list is a set containing the residues indexes that are in the same cluster. The list is ordered in descending order with largest cluster in first position. 
     """
     center_of_masses = mol_group.center_of_mass(compound="residues") #Center of mass by residues
-    neighbors = distances.self_capped_distance(center_of_masses, threshold, box = system.dimensions) #Compute neighborhood with TO center of masses
+    neighbors = distances.self_capped_distance(center_of_masses, threshold, box = box_dimension) #Compute neighborhood with TO center of masses
     formated_neighbors = format_neighborhood(neighbors[0])
     clusters = clustering(formated_neighbors, mol_group.n_residues)
     return clusters
