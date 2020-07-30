@@ -10,6 +10,7 @@ import cProfile, pstats, io
 from pstats import SortKey
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+import os
 
 
 def args_gestion():
@@ -21,24 +22,26 @@ def args_gestion():
     parser.add_argument("-t", "--threshold", help = "Threshold for clustering (default : 13)", metavar = "NUMBER", type=float, default=13)
     parser.add_argument("-n", "--to-keep", help = "Number of largest clusters to keep for the results report (default : 2)", metavar = "NUMBER", type=int, default = 2)
     parser.add_argument("-m", "--method", help = "Method for clusters correspondance through frames (residue or position)", type=str, default = "residue", choices=['residue', 'position'])
-    parser.add_argument("-c", "--nb-corr", help = "Number of largest clusters to take into account for clusters correspondance at time t (default : number of clusters to keep, -1 for all)", type = int, metavar = "NUMBER")
-    parser.add_argument("--frames", help = "Number of frames to process (default : all)", metavar = "NUMBER", type = int, default=0)
+    parser.add_argument("-c", "--nb-corr", help = "Number of largest clusters to take into account for clusters correspondance at time t (default : all)", type = int, metavar = "NUMBER", default = -1)
+    parser.add_argument("--frames", help = "Number of frames to process (default : all)", metavar = "NUMBER", type = int, default=-1)
 
     args = parser.parse_args()
 
     if not args.prefix :
         args.prefix = ".".join(args.traj.split("/")[-1].split(".")[:-1]) # Get trajectory file name without all directories path and without file extension.
-
-    if not args.nb_corr :
-        args.nb_corr = args.to_keep
-
+        
     if args.nb_corr != -1 and args.nb_corr < args.to_keep : 
         logging.error("Number of clusters for correspondance calculation (-c/--nb-corr) can't be lower than number of clusters to keep (-n/--to-keep).")
         exit()
+
+    #Create output directory
+    if not os.path.isdir(args.outdir):
+        logging.info(f"Create {args.outdir} directory")
+        os.mkdir(args.outdir)
     
     return args
 
-def plot_size(out_prefix:str, clusters:molecules_aggregate.clusters.ClusterIterator):
+def plot_size(out_prefix:str, system):
     """Plot size of clusters provided in ClusterIterator through time
 
     Args:
@@ -47,13 +50,20 @@ def plot_size(out_prefix:str, clusters:molecules_aggregate.clusters.ClusterItera
     """
 
     fig, ax = plt.subplots()
-    ax.set_title(f"Size of the {clusters.nb_cluster} largest clusters through time ({ARGS.method} for cluster correspondance)")
+    ax.set_title(f"Size of the {system.nb_clusters} largest clusters through time ({ARGS.method} for cluster correspondance)")
     ax.set_ylim(0,300)
     ax.set_xlabel("Time")
     ax.set_ylabel("Cluster size")
 
-    for cluster_frames in clusters:
-        ax.plot([c.time for c in cluster_frames], [c.size for c in cluster_frames], label = f"Cluster {cluster_frames[0].idx}")
+    times = [frame.time for frame in system]
+    clusters_sizes = []
+
+    for i in range(system.nb_clusters):
+        sizes = [frame.clusters[i].size for frame in system]
+        clusters_sizes.append(sizes)
+
+    for i, sizes in enumerate(clusters_sizes):
+        ax.plot(times, sizes, label = f"Cluster {i}", alpha = 0.7)
     
     ax.legend()
     
@@ -144,14 +154,15 @@ if __name__ == "__main__":
 
     logging.info("Load system...")
 
-    system = mda.Universe(ARGS.topo, ARGS.traj)
-    logging.info("Compute clusters through all frames...")
+    mda_system = mda.Universe(ARGS.topo, ARGS.traj)
 
     #This lines are for profiling the time
     '''pr = cProfile.Profile()
     pr.enable()'''
 
-    clusters = molecules_aggregate.load_clusters(system, "TO", ARGS.threshold, ARGS.to_keep, ARGS.frames, ARGS.method, ARGS.nb_corr)
+    #clusters = molecules_aggregate.load_clusters(system, "TO", ARGS.threshold, ARGS.to_keep, ARGS.frames, ARGS.method, ARGS.nb_corr)
+
+    system = molecules_aggregate.load_system(mda_system, "TO", ARGS.threshold, ARGS.to_keep, "DOPC", 10, ARGS.frames)
 
     #This lines are for profiling the time
     '''pr.disable()
@@ -161,9 +172,11 @@ if __name__ == "__main__":
     ps.print_stats()
     print(s.getvalue())'''
 
-    plot_size(ARGS.prefix, clusters)
-    plot_com(ARGS.prefix, clusters)
-    plot_2d(ARGS.prefix, clusters)
+    out_path = ARGS.outdir + "/" + ARGS.prefix
+
+    plot_size(out_path, system)
+    #plot_com(out_path, clusters)
+    #plot_2d(out_path, clusters)
     logging.info(f"Analysis end in {time.time() - start} s")
 
 
