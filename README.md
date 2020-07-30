@@ -11,7 +11,7 @@ Required packages :
 
 We advice to use conda or venv environment. 
 ``` 
-pip -r requirements.txt 
+pip install -r requirements.txt 
 ```
 
 You need to add module to your PYTHONPATH (pip package will come) :
@@ -51,7 +51,7 @@ Then, there's two methods to identify clusters in next frames :
 - By residues : with this method, the cluster at time t-1 is assigned to the cluster with "highest residue correspondance" at time t. Highest residue correspondance is computed this way between two clusters : number of identical residues over size of the largest cluster. 
 - By position : with this method, the cluster at time t-1 is assigned to the closest cluster at time t, based on distance between center of masses. This method is longer, because all center of masses have to be computed. 
 
-You can configure the methods by changing the number of clusters to take into account for clusters correspondance (-c/--nb-corr option). It means at time t, only the choosen number largest clusters will be compared to kept t-1 clusters (-n/-to-keep number). For example, if you choose all, all the clusters at time t will be compared with kept clusters at time t-1, and the closest will be assigned to each. Keep all is long for position method because all centers of mass have to be computed. 
+You can configure the methods by changing the number of clusters to take into account for clusters correspondance (-c/--nb-corr option). It means at time t, only the choosen number largest clusters will be compared to kept t-1 clusters (-n/-to-keep number). For example, if you choose all, all the clusters at time t will be compared with kept clusters at time t-1, and the closest will be assigned to each. Keep all is long for position method because all centers of mass have to be computed and the results will be biaised by membrane movement. 
 
 ## Outputs 
 

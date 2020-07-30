@@ -1,2 +1,2 @@
 mdanalysis
-matplotlib=3.2.2
+matplotlib==3.2.2
