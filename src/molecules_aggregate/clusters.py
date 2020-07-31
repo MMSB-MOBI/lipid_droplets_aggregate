@@ -45,12 +45,21 @@ class Cluster:
         self.center_of_mass = self._center_of_mass()
 
     def _center_of_mass(self):
-        atoms = self.parent_system.cluster_atom_group[list(self.residues)].atoms
+        atoms = self.parent_system.cluster_atom_group.residues[list(self.residues)].atoms
         return atoms.center_of_mass()
 
     @property
-    def z_position_relative_to_membrane(self):  
-        return self.parent_system.membrane.highest_z_mean - self.center_of_mass[2]
+    def z_relative_highest(self):  
+        return self.parent_system.membrane.highest.z_mean - self.center_of_mass[2]
+    
+    @property
+    def x_relative_highest(self):
+        return self.parent_system.membrane.highest.x_mean - self.center_of_mass[0]
+        
+
+    @property
+    def y_relative_highest(self):
+        return self.parent_system.membrane.highest.y_mean - self.center_of_mass[1]
 
     @property
     def size(self):
@@ -68,19 +77,23 @@ class OneFrameClusters:
         
     def _load_clusters(self):
         clusters = compute_clusters(self.parent_system.box_dimension, self.parent_system.cluster_atom_group, self.parent_system.cluster_threshold)
-
+        if self.parent_system.nb_correspondance != -1:
+            clusters = clusters[:self.parent_system.nb_correspondance]
         if self.parent_system.previous: 
-            clusters_obj = self.make_correspondance_by_position(clusters)
+            if self.parent_system.correspondance_method == "position":
+                clusters_obj = self.make_correspondance_by_position(clusters)
+            elif self.parent_system.correspondance_method == "residue":
+                clusters_obj = self.make_correspondance_by_residues(clusters)
         else:
             clusters_obj = [Cluster(self.parent_system, residues, i) for i,residues in enumerate(clusters[:self.parent_system.to_keep_clusters])]
         
         return clusters_obj
 
-    #def __repr__(self):
-    #    return str(self.clusters_list)    
+    def __repr__(self):
+        return str(self.clusters_list)    
 
-    #def __iter__(self):
-    #    return iter(self.clusters_list)
+    def __iter__(self):
+        return iter(self.clusters_list)
 
     def __getitem__(self, i):
         return self.clusters_list[i]
@@ -132,21 +145,11 @@ class OneFrameClusters:
         tmp_clusters = [Cluster(self.parent_system, residues) for residues in new_clusters_residues]
         com_curr = np.array([c.center_of_mass for c in tmp_clusters])
 
-        print(tmp_clusters[207].size)
-        print(com_prev)
-        print(com_curr[207])
-
         dist_matrix = distances.distance_array(com_prev, com_curr)
 
-        #print(len(dist_matrix))
-        
         new_clusters = []
-        #assigned = set()
         for i, dist in enumerate(dist_matrix):
-            #print(i, dist)
             closest_cluster_idx = np.where(dist == min(dist))[0]
-            #print(i, closest_cluster_idx)
-            #print(dist[207])
             if len(closest_cluster_idx) > 1:
                 logging.warn(f"Frame {frame_nb}. More than one same center of mass distance for cluster {i} correspondance. Assign the first.")
     
@@ -162,7 +165,6 @@ class OneFrameClusters:
 
 
 class ClusterIterator:
-
     def __init__(self, mda_system, molecule, cluster_threshold, nb_to_keep, frames_to_process, cluster_correspondance, nb_cluster_for_corr):
         """Init function
 
@@ -371,3 +373,7 @@ def clustering(formated_neighbors:Dict[int, List[int]], nb_residues:int) -> List
     
     sorted_clusters = sorted(clusters_array, key = lambda cluster:len(cluster), reverse = True)
     return sorted_clusters
+
+
+
+    

@@ -79,15 +79,16 @@ def plot_com(out_prefix:str, clusters:molecules_aggregate.clusters.ClusterIterat
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
     ax.set_title(f"Absolute center of mass of clusters ({ARGS.method} for cluster correspondance)")
-    ax.set_xlim(0, system.dimensions[0])
-    ax.set_ylim(0, system.dimensions[1])
-    ax.set_zlim(0, system.dimensions[2])
+    #ax.set_xlim(0, system.box_dimension[0])
+    #ax.set_ylim(0, system.box_dimension[1])
+    #ax.set_zlim(0, system.box_dimension[2])
     ax.set_xlabel("x")
     ax.set_ylabel("y")
     ax.set_zlabel("z")
-    for cluster_frames in clusters:
-        ax.scatter([c.center_of_mass[0] for c in cluster_frames], [c.center_of_mass[1] for c in cluster_frames], [c.center_of_mass[2] for c in cluster_frames], label =  f"Cluster {cluster_frames[0].idx}", alpha = 0.1, s=1, depthshade = False)
 
+    for i in range(system.nb_clusters):
+        ax.scatter([frame.clusters[i].center_of_mass[0] for frame in system], [frame.clusters[i].center_of_mass[1] for frame in system], [frame.clusters[i].center_of_mass[2] for frame in system], label =  f"Cluster {i}", alpha = 0.5, s=10, depthshade = False)
+        
     leg = ax.legend(loc="center left")
     for lh in leg.legendHandles:
         lh.set_alpha(1)
@@ -146,6 +147,58 @@ def plot_z_membrane(out_prefix, membrane):
 
     plt.savefig(f"{out_prefix}_z_membrane.png")
 
+def plot_relative_position(out_prefix, system):
+    fig, ax = plt.subplots()
+    ax.set_title(f"Relative z mean position")
+    ax.set_ylim(0, system.box_dimension[2])
+    ax.set_xlabel("Time")
+    ax.set_ylabel("z mean position")
+
+    times = [frame.time for frame in system]
+    clusters_sizes = []
+
+    #ax.plot(times, [frame.membrane.lowest_z_mean for frame in system], color="grey")
+
+
+    ax.plot(times, [frame.membrane.highest.z_mean for frame in system], color = "grey", label = "Highest membrane point")
+    #ax.plot(times, [frame.membrane.highest.z_mean + frame.membrane.highest.z_std for frame in system], color = "grey", linestyle="--", label = "Standard deviation")
+    #ax.plot(times, [frame.membrane.highest.z_mean - frame.membrane.highest.z_std for frame in system], color = "grey", linestyle="--")
+
+    ax.fill_between(times, [frame.membrane.highest.z_mean - frame.membrane.highest.z_std for frame in system], [frame.membrane.highest.z_mean + frame.membrane.highest.z_std for frame in system], color="grey", alpha = 0.5)
+
+    ax.plot(times, [frame.membrane.lowest.z_mean for frame in system], color = "tan", label = "Lowest membrane point")
+    #ax.plot(times, [frame.membrane.lowest.z_mean + frame.membrane.lowest.z_std for frame in system], color = "tan", linestyle="--", label = "Standard deviation")
+    #ax.plot(times, [frame.membrane.lowest.z_mean - frame.membrane.lowest.z_std for frame in system], color = "tan", linestyle="--")
+
+    ax.fill_between(times, [frame.membrane.lowest.z_mean - frame.membrane.lowest.z_std for frame in system], [frame.membrane.lowest.z_mean + frame.membrane.lowest.z_std for frame in system], color="tan", alpha = 0.5)
+
+    for i in range(system.nb_clusters):
+        ax.plot(times, [frame.clusters[i].center_of_mass[2] for frame in system], label = f"Cluster {i}")
+    
+    ax.legend()
+    
+    fig.savefig(f"{out_prefix}_relative_z_position.png")
+
+def plot_relative_com(out_prefix, system):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    #ax.set_title(f"Absolute center of mass of clusters ({ARGS.method} for cluster correspondance)")
+    #ax.set_xlim(0, system.box_dimension[0])
+    #ax.set_ylim(0, system.box_dimension[1])
+    #ax.set_zlim(0, system.box_dimension[2])
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_zlabel("z")
+
+    for i in range(system.nb_clusters):
+        ax.scatter([frame.clusters[i].x_relative_highest for frame in system], [frame.clusters[i].y_relative_highest for frame in system], [frame.clusters[i].z_relative_highest for frame in system], label =  f"Cluster {i}", depthshade = False, alpha = 0.5, s=10)
+        
+    leg = ax.legend(loc="center left")
+    for lh in leg.legendHandles:
+        lh.set_alpha(1)
+        lh.set_sizes([10])
+    fig.savefig(f"{out_prefix}_relative_com.png")  
+
 
 if __name__ == "__main__":
     ARGS = args_gestion()
@@ -162,7 +215,7 @@ if __name__ == "__main__":
 
     #clusters = molecules_aggregate.load_clusters(system, "TO", ARGS.threshold, ARGS.to_keep, ARGS.frames, ARGS.method, ARGS.nb_corr)
 
-    system = molecules_aggregate.load_system(mda_system, "TO", ARGS.threshold, ARGS.to_keep, "DOPC", 10, ARGS.frames)
+    system = molecules_aggregate.load_system(mda_system, "TO", ARGS.threshold, ARGS.to_keep, "DOPC", 10, ARGS.frames, ARGS.method, ARGS.nb_corr)
 
     #This lines are for profiling the time
     '''pr.disable()
@@ -175,7 +228,9 @@ if __name__ == "__main__":
     out_path = ARGS.outdir + "/" + ARGS.prefix
 
     plot_size(out_path, system)
-    #plot_com(out_path, clusters)
+    plot_com(out_path, system)
+    plot_relative_position(out_path, system)
+    plot_relative_com(out_path, system)
     #plot_2d(out_path, clusters)
     logging.info(f"Analysis end in {time.time() - start} s")
 
