@@ -111,6 +111,7 @@ class OneFrameClusters:
             system (MDAnalysis.universe.Universe): MDAnalysis universe
         """
 
+        #print("A", self.parent_system.previous.frame)
         previous_clusters = [c.residues for c in self.parent_system.previous.clusters]
         reordered_new_clusters = []
         for i,res_list in enumerate(previous_clusters):
