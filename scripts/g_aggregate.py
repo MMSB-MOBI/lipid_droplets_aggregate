@@ -50,6 +50,7 @@ def plot_size(out_prefix:str, system):
     """
 
     fig, ax = plt.subplots()
+    fig.set_size_inches(8, 5)
     ax.set_title(f"Size of the {system.nb_clusters} largest clusters through time ({ARGS.method} for cluster correspondance)")
     ax.set_ylim(0,300)
     ax.set_xlabel("Time")
@@ -67,7 +68,7 @@ def plot_size(out_prefix:str, system):
     
     ax.legend()
     
-    fig.savefig(f"{out_prefix}_size_clusters.png")
+    fig.savefig(f"{out_prefix}_size_clusters.svg", format = "svg")
 
 def plot_com(out_prefix:str, clusters:molecules_aggregate.clusters.ClusterIterator):
     """Plot absolute center of masses of clusters for all frames along x,y and z axis on "3d" plot. 
@@ -93,7 +94,7 @@ def plot_com(out_prefix:str, clusters:molecules_aggregate.clusters.ClusterIterat
     for lh in leg.legendHandles:
         lh.set_alpha(1)
         lh.set_sizes([10])
-    fig.savefig(f"{out_prefix}_absolute_com.png")  
+    fig.savefig(f"{out_prefix}_absolute_com.svg", format="svg")  
 
 def plot_2d(out_prefix:str, clusters:molecules_aggregate.clusters.ClusterIterator):
     """Plot absolute center of masses of clusters for all frames with 2d projection along xz, yx and yz axis. 
@@ -177,11 +178,13 @@ def plot_relative_position(out_prefix, system):
     
     ax.legend()
     
-    fig.savefig(f"{out_prefix}_relative_z_position.png")
+    fig.savefig(f"{out_prefix}_relative_z_position.svg", format = "svg")
 
 def plot_relative_com(out_prefix, system):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
+    ax.set_title(f'"Relative" center of mass of clusters ({ARGS.method} for cluster correspondance)')
+
     #ax.set_title(f"Absolute center of mass of clusters ({ARGS.method} for cluster correspondance)")
     #ax.set_xlim(0, system.box_dimension[0])
     #ax.set_ylim(0, system.box_dimension[1])
@@ -197,7 +200,7 @@ def plot_relative_com(out_prefix, system):
     for lh in leg.legendHandles:
         lh.set_alpha(1)
         lh.set_sizes([10])
-    fig.savefig(f"{out_prefix}_relative_com.png")  
+    fig.savefig(f"{out_prefix}_relative_com.svg", format = "svg")  
 
 
 if __name__ == "__main__":
