@@ -3,27 +3,13 @@ import math
 
 class Slice:
     def __init__(self, atoms_position):
-        self.atoms_position = atoms_position
-        self._z_mean = None
-
-    @property
-    def z_mean(self):
-        if not self._z_mean:
-            self._z_mean = np.mean([pos[2] for pos in self.atoms_position])
-        return self._z_mean
-
-    @property
-    def y_mean(self):
-        return np.mean([pos[1] for pos in self.atoms_position])
-    
-    @property
-    def x_mean(self):
-        return np.mean([pos[0] for pos in self.atoms_position])
-
-    @property
-    def z_std(self):
-        return np.std([pos[2] for pos in self.atoms_position])
-
+        z_pos = [pos[2] for pos in atoms_position]
+        x_pos = [pos[0] for pos in atoms_position]
+        y_pos = [pos[1] for pos in atoms_position]
+        self.z_mean = np.mean(z_pos)
+        self.z_std = np.std(z_pos)
+        self.x_mean = np.mean(x_pos)
+        self.y_mean = np.mean(y_pos)
 
 
     @property

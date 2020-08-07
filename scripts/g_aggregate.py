@@ -11,6 +11,7 @@ from pstats import SortKey
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import os
+import multiprocessing, psutil
 
 
 def args_gestion():
@@ -202,8 +203,29 @@ def plot_relative_com(out_prefix, system):
         lh.set_sizes([10])
     fig.savefig(f"{out_prefix}_relative_com.svg", format = "svg")  
 
+def get_ram(max_ram):
+    while True:
+        ram = psutil.virtual_memory()._asdict()["used"]
+        if ram > max_ram.value:
+            max_ram.value = ram
+        time.sleep(1)
+
+def print_ram(ram):
+    units = ["o", "Ko", "Mo", "Go", "To"]
+    mem = float(ram)
+    unit = 0
+    while mem >= 1024:
+        mem = mem / 1024
+        unit += 1
+    print("MAX_RAM", f"{round(mem,3)} {units[unit]}")
+
 
 if __name__ == "__main__":
+
+    max_ram = multiprocessing.Manager().Value("i", 0)
+    ram_process =  multiprocessing.Process(target = get_ram, args=(max_ram,))
+    ram_process.start()
+
     ARGS = args_gestion()
 
     start = time.time()
@@ -218,7 +240,7 @@ if __name__ == "__main__":
 
     #clusters = molecules_aggregate.load_clusters(system, "TO", ARGS.threshold, ARGS.to_keep, ARGS.frames, ARGS.method, ARGS.nb_corr)
 
-    system = molecules_aggregate.load_system(mda_system, "TO", ARGS.threshold, ARGS.to_keep, "DOPC", 10, ARGS.frames, ARGS.method, ARGS.nb_corr)
+    system = molecules_aggregate.load_system(mda_system, "TO", ARGS.threshold, ARGS.to_keep, "DOPC", 50, ARGS.frames, ARGS.method, ARGS.nb_corr)
 
     #This lines are for profiling the time
     '''pr.disable()
@@ -237,6 +259,8 @@ if __name__ == "__main__":
     #plot_2d(out_path, clusters)
     logging.info(f"Analysis end in {time.time() - start} s")
 
+    ram_process.terminate()
+    print_ram(max_ram.value)
 
 
 

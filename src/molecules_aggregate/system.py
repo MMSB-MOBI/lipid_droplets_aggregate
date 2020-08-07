@@ -2,7 +2,6 @@ from . import clusters as clusters_lib
 from . import membrane as membrane_lib
 from . import error
 import logging
-import pmda.custom
 import math, multiprocessing, time
 
 global COPIED_UNIVERSES
@@ -147,6 +146,12 @@ def slice_trajectories(nb_frames, nb_process):
     
     
     return intervals
+
+def get_slices(membrane_atoms, intervals):
+    slices = []
+    for i in intervals:
+        slices.append(membrane_atoms.select_atoms(f"prop x >= {i[0]} and prop x < {i[1]}"))
+    return slices
 
     
 
