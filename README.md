@@ -22,25 +22,42 @@ export PYTHONPATH=$PYTHONPATH:<this_directory>/src/
 ## Usage
 
 ```
-usage: g_aggregate.py [-h] -f FILE -s FILE [-o DIR] [-p STR] [-t NUMBER] [-n NUMBER] [-m {residue,position}] [-c NUMBER] [--frames NUMBER]
+usage: g_aggregate.py [-h] -f FILE -s FILE [-o DIR] [-p STR] [--c-mol STR] [-t NUMBER] [-n NUMBER]
+                      [-m {residue,position}] [-c NUMBER] [--frames NUMBER] [--m-mol STR] [--slice-size FLOAT]
+                      [--slice-axis STR] [--process INT] [--membrane-axis {x,y,z}]
 
 Script to identify TO clusters size and position along the MD trajectory.
 
 optional arguments:
   -h, --help            show this help message and exit
+
+General options:
   -f FILE, --traj FILE  Trajectory (all formats accepted by MDAnalysis)
   -s FILE, --topo FILE  Topology (all formats accepted by MDAnalysis)
   -o DIR, --outdir DIR  Output directory (default : .)
   -p STR, --prefix STR  Output prefix (default : Trajectory file name)
+  --frames NUMBER       Number of frames to process (default : all)
+  --process INT         Number of process to run for membrane computation (default : available cpus)
+
+Membrane options:
+  --m-mol STR           Membrane molecule (default : DOPC)
+  --slice-size FLOAT    Membrane slice size (default : 10)
+  --slice-axis STR      Axis to slice membrane (default : x)
+  --membrane-axis {x,y,z}
+                        Axis to determine membrane highest and lowest points (default : z)
+
+Clustering options:
+  --c-mol STR           Clusters molecule (default : TO)
   -t NUMBER, --threshold NUMBER
                         Threshold for clustering (default : 13)
   -n NUMBER, --to-keep NUMBER
-                        Number of largest clusters to keep for the results report (default : 2)
+                        Number of largest clusters to keep (default : 2)
   -m {residue,position}, --method {residue,position}
-                        Method for clusters correspondance through frames (residue or position)
+                        Method for clusters correspondance through frames (residue or position) (default :
+                        residue)
   -c NUMBER, --nb-corr NUMBER
-                        Number of largest clusters to take into account for clusters correspondance at time t (default 2, -1 for all)
-  --frames NUMBER       Number of frames to process (default : all)
+                        Number of largest clusters to take into account for clusters correspondance at time t
+                        (default : all)
 
 ```
 
@@ -55,9 +72,9 @@ You can configure the methods by changing the number of clusters to take into ac
 
 ## Outputs 
 
-* \<prefix>_size_clusters.png : Size of largest clusters through time
-* \<prefix>_absolute_com.png : Position of largest clusters raw center of masses through all frames. 
-* \<prefix>_xz.png, \<prefix>_yx.png, \<prefix>_yz.png : Projection on 2-axis of largest clusters raw center of masses through all frames.
+* \<prefix>_size_clusters.svf : Size of largest clusters through time
+* \<prefix>_absolute_com.svg : Position of largest clusters raw center of masses through all frames. 
+* \<prefix>_relative\_<z|x|y>.svg : x|y|z mean coordinates of clusters and highest and lowest point of membrane.
 
 
 
