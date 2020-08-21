@@ -3,264 +3,129 @@
 import argparse
 import MDAnalysis as mda
 import molecules_aggregate
+from molecules_aggregate import error, plot
+
 import time
 import logging
 logging.basicConfig(level = logging.INFO, format='%(levelname)s\t%(message)s')
 import cProfile, pstats, io
 from pstats import SortKey
-import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import os
 import multiprocessing, psutil
+from molecules_aggregate.utils import check_ram
+import molecules_aggregate.plot as plot
+
+class CheckFileExistence(argparse.Action):
+    def __init__(self, option_strings, dest, nargs=None, **kwargs):
+        super(CheckFileExistence, self).__init__(option_strings, dest, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string = None):
+        if not os.path.exists(values):
+            raise error.ArgumentError(f"{values} file doesn't exist")
+        setattr(namespace, self.dest, values)
+
+class CreateDirectory(argparse.Action):
+    """Create directory given as argument if not exists"""
+    def __init__(self, option_strings, dest, nargs=None, **kwargs):
+        super(CreateDirectory, self).__init__(option_strings, dest, **kwargs)
+    
+    def __call__(self, parser, namespace, values, option_string = None):
+        if not os.path.exists(values):
+            os.makedirs(values)
+        else:
+            logging.warning(f"Output directory {values} already exists.")
+        setattr(namespace, self.dest, values)
 
 
 def args_gestion():
     parser = argparse.ArgumentParser(description="Script to identify TO clusters size and position along the MD trajectory.")
-    parser.add_argument("-f", "--traj", help = "Trajectory (all formats accepted by MDAnalysis)", required = True,  type=str, metavar = "FILE")
-    parser.add_argument("-s", "--topo", help = "Topology (all formats accepted by MDAnalysis)", required = True, metavar ="FILE", type=str)
-    parser.add_argument("-o", "--outdir", help = "Output directory (default : .)", default=".", metavar = "DIR", type=str)
-    parser.add_argument("-p", "--prefix", help = "Output prefix (default : Trajectory file name)", metavar = "STR", type=str)
-    parser.add_argument("-t", "--threshold", help = "Threshold for clustering (default : 13)", metavar = "NUMBER", type=float, default=13)
-    parser.add_argument("-n", "--to-keep", help = "Number of largest clusters to keep for the results report (default : 2)", metavar = "NUMBER", type=int, default = 2)
-    parser.add_argument("-m", "--method", help = "Method for clusters correspondance through frames (residue or position)", type=str, default = "residue", choices=['residue', 'position'])
-    parser.add_argument("-c", "--nb-corr", help = "Number of largest clusters to take into account for clusters correspondance at time t (default : all)", type = int, metavar = "NUMBER", default = -1)
-    parser.add_argument("--frames", help = "Number of frames to process (default : all)", metavar = "NUMBER", type = int, default=-1)
-
+    group_io = parser.add_argument_group("General options")
+    group_membrane = parser.add_argument_group("Membrane options")
+    group_cluster = parser.add_argument_group("Clustering options")
+    
+    group_io.add_argument("-f", "--traj", help = "Trajectory (all formats accepted by MDAnalysis)", required = True,  type=str, metavar = "FILE", action = CheckFileExistence)
+    group_io.add_argument("-s", "--topo", help = "Topology (all formats accepted by MDAnalysis)", required = True, metavar ="FILE", type=str, action = CheckFileExistence)
+    group_io.add_argument("-o", "--outdir", help = "Output directory (default : .)", default=".", metavar = "DIR", type=str, action = CreateDirectory)
+    group_io.add_argument("-p", "--prefix", help = "Output prefix (default : Trajectory file name)", metavar = "STR", type=str)
+    group_cluster.add_argument("--c-mol", help = "Clusters molecule (default : TO)", metavar = "STR", type = str, default = "TO")
+    group_cluster.add_argument("-t", "--threshold", help = "Threshold for clustering (default : 13)", metavar = "NUMBER", type=float, default=13)
+    group_cluster.add_argument("-n", "--to-keep", help = "Number of largest clusters to keep (default : 2)", metavar = "NUMBER", type=int, default = 2)
+    group_cluster.add_argument("-m", "--method", help = "Method for clusters correspondance through frames (residue or position) (default : residue)", type=str, default = "residue", choices=['residue', 'position'])
+    group_cluster.add_argument("-c", "--nb-corr", help = "Number of largest clusters to take into account for clusters correspondance at time t (default : all)", type = int, metavar = "NUMBER", default = -1)
+    group_io.add_argument("--frames", help = "Number of frames to process (default : all)", metavar = "NUMBER", type = int, default=-1)
+    group_membrane.add_argument("--m-mol", help = "Membrane molecule (default : DOPC)", metavar = "STR", type = str, default = "DOPC")
+    group_membrane.add_argument("--slice-size", help = "Membrane slice size (default : 10)", metavar = "FLOAT", type = float, default = 10)
+    group_membrane.add_argument("--slice-axis", help = "Axis to slice membrane (default : x)", metavar = "STR", type = str, default = "x", choices = ["x", "y", "z"])
+    group_io.add_argument("--process", help = "Number of process to run for membrane computation (default : available cpus)", metavar = "INT", type = int, default = multiprocessing.cpu_count())
+    group_membrane.add_argument("--membrane-axis", help = "Axis to determine membrane highest and lowest points (default : z)", default = "z", type=str, choices=["x", "y", "z"])
     args = parser.parse_args()
 
-    if not args.prefix :
-        args.prefix = ".".join(args.traj.split("/")[-1].split(".")[:-1]) # Get trajectory file name without all directories path and without file extension.
-        
-    if args.nb_corr != -1 and args.nb_corr < args.to_keep : 
-        logging.error("Number of clusters for correspondance calculation (-c/--nb-corr) can't be lower than number of clusters to keep (-n/--to-keep).")
-        exit()
-
-    #Create output directory
-    if not os.path.isdir(args.outdir):
-        logging.info(f"Create {args.outdir} directory")
-        os.mkdir(args.outdir)
+    #Set axis
+    axis_trans = {"x" : 0, "y" : 1, "z" : 2}
+    args.slice_axis_idx = axis_trans[args.slice_axis]
+    #args.membrane_axis_idx = axis_trans[args.membrane_axis]
     
     return args
 
-def plot_size(out_prefix:str, system):
-    """Plot size of clusters provided in ClusterIterator through time
-
-    Args:
-        out_prefix (str): prefix for output png file
-        clusters (molecules_aggregate.clusters.ClusterIterator): ClusterIterator object given by molecule_aggregate.load_clusters()
-    """
-
-    fig, ax = plt.subplots()
-    fig.set_size_inches(8, 5)
-    ax.set_title(f"Size of the {system.nb_clusters} largest clusters through time ({ARGS.method} for cluster correspondance)")
-    ax.set_ylim(0,300)
-    ax.set_xlabel("Time")
-    ax.set_ylabel("Cluster size")
-
-    times = [frame.time for frame in system]
-    clusters_sizes = []
-
-    for i in range(system.nb_clusters):
-        sizes = [frame.clusters[i].size for frame in system]
-        clusters_sizes.append(sizes)
-
-    for i, sizes in enumerate(clusters_sizes):
-        ax.plot(times, sizes, label = f"Cluster {i}", alpha = 0.7)
+def check_arguments():
+    if ARGS.frames > len(UNIVERSE.trajectory):
+        raise error.ArgumentError(f"Universe only contains {len(UNIVERSE.trajectory)} frames. You can't compute {ARGS.frames}")
     
-    ax.legend()
+    if ARGS.nb_corr != -1 and ARGS.nb_corr < ARGS.to_keep : 
+        raise error.ArgumentError("Number of clusters for correspondance calculation (-c/--nb-corr) can't be lower than number of clusters to keep (-n/--to-keep).")
     
-    fig.savefig(f"{out_prefix}_size_clusters.svg", format = "svg")
+    if ARGS.slice_size > UNIVERSE.dimensions[ARGS.slice_axis_idx]:
+        raise error.ArgumentError(f"Slice size can't be larger than box dimension ({ARGS.slice_size} > {UNIVERSE.dimensions[ARGS.slice_axis]})")
 
-def plot_com(out_prefix:str, clusters:molecules_aggregate.clusters.ClusterIterator):
-    """Plot absolute center of masses of clusters for all frames along x,y and z axis on "3d" plot. 
-
-    Args:
-        out_prefix (str): prefix for output png file
-        clusters (molecules_aggregate.clusters.ClusterIterator): ClusterIterator object given by molecule_aggregate.load_clusters()
-    """
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.set_title(f"Absolute center of mass of clusters ({ARGS.method} for cluster correspondance)")
-    #ax.set_xlim(0, system.box_dimension[0])
-    #ax.set_ylim(0, system.box_dimension[1])
-    #ax.set_zlim(0, system.box_dimension[2])
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_zlabel("z")
-
-    for i in range(system.nb_clusters):
-        ax.scatter([frame.clusters[i].center_of_mass[0] for frame in system], [frame.clusters[i].center_of_mass[1] for frame in system], [frame.clusters[i].center_of_mass[2] for frame in system], label =  f"Cluster {i}", alpha = 0.5, s=10, depthshade = False)
-        
-    leg = ax.legend(loc="center left")
-    for lh in leg.legendHandles:
-        lh.set_alpha(1)
-        lh.set_sizes([10])
-    fig.savefig(f"{out_prefix}_absolute_com.svg", format="svg")  
-
-def plot_2d(out_prefix:str, clusters:molecules_aggregate.clusters.ClusterIterator):
-    """Plot absolute center of masses of clusters for all frames with 2d projection along xz, yx and yz axis. 
-
-    Args:
-        out_prefix (str): prefix for output png file
-        clusters (molecules_aggregate.clusters.ClusterIterator): ClusterIterator object given by molecule_aggregate.load_clusters()
-    """
-    fig, ax = plt.subplots()
-    ax.set_title(f"Absolute center of mass of clusters. Projection through x/z axis. ({ARGS.method} for cluster correspondance)")
-    ax.set_xlim(0,system.dimensions[0])
-    ax.set_ylim(0,system.dimensions[2])
-    ax.set_xlabel("x")
-    ax.set_ylabel("z")
-    
-    for cluster_frames in clusters:
-        ax.scatter([c.center_of_mass[0] for c in cluster_frames], [c.center_of_mass[2] for c in cluster_frames], s = 10, label =  f"Cluster {cluster_frames[0].idx}", alpha = 0.1)
-    
-    leg = ax.legend()
-    [lh.set_alpha(1) for lh in leg.legendHandles]
-    fig.savefig(f"{out_prefix}_xz.png")
-
-    fig, ax = plt.subplots()
-    ax.set_title(f"Absolute center of mass of clusters. Projection through y/x axis. ({ARGS.method} for cluster correspondance)")
-    ax.set_xlim(0,system.dimensions[1])
-    ax.set_ylim(0,system.dimensions[0])
-    ax.set_xlabel("y")
-    ax.set_ylabel("x")
-    for cluster_frames in clusters:
-        ax.scatter([c.center_of_mass[1] for c in cluster_frames], [c.center_of_mass[0] for c in cluster_frames], s = 10, label =  f"Cluster {cluster_frames[0].idx}", alpha = 0.1)
-    leg = ax.legend()
-    [lh.set_alpha(1) for lh in leg.legendHandles]
-    fig.savefig(f"{out_prefix}_yx.png")
-
-    fig, ax = plt.subplots()
-    ax.set_title(f"Absolute center of mass of clusters. Projection through y/z axis. ({ARGS.method} for cluster correspondance)")
-    ax.set_xlim(0,system.dimensions[1])
-    ax.set_ylim(0,system.dimensions[2])
-    ax.set_xlabel("y")
-    ax.set_ylabel("z")
-    for cluster_frames in clusters:
-        ax.scatter([c.center_of_mass[1] for c in cluster_frames], [c.center_of_mass[2] for c in cluster_frames], s = 10, label =  f"Cluster {cluster_frames[0].idx}", alpha = 0.1)
-    leg = ax.legend()
-    [lh.set_alpha(1) for lh in leg.legendHandles]
-    fig.savefig(f"{out_prefix}_yz.png")
-
-def plot_z_membrane(out_prefix, membrane):
-    fig, ax = plt.subplots()
-    #ax.set_ylim(0, system.dimensions[2])
-    ax.scatter([i for i in range(len(membrane.slices))],membrane.slices)
-
-    plt.savefig(f"{out_prefix}_z_membrane.png")
-
-def plot_relative_position(out_prefix, system):
-    fig, ax = plt.subplots()
-    ax.set_title(f"Relative z mean position")
-    ax.set_ylim(0, system.box_dimension[2])
-    ax.set_xlabel("Time")
-    ax.set_ylabel("z mean position")
-
-    times = [frame.time for frame in system]
-    clusters_sizes = []
-
-    #ax.plot(times, [frame.membrane.lowest_z_mean for frame in system], color="grey")
-
-
-    ax.plot(times, [frame.membrane.highest.z_mean for frame in system], color = "grey", label = "Highest membrane point")
-    #ax.plot(times, [frame.membrane.highest.z_mean + frame.membrane.highest.z_std for frame in system], color = "grey", linestyle="--", label = "Standard deviation")
-    #ax.plot(times, [frame.membrane.highest.z_mean - frame.membrane.highest.z_std for frame in system], color = "grey", linestyle="--")
-
-    ax.fill_between(times, [frame.membrane.highest.z_mean - frame.membrane.highest.z_std for frame in system], [frame.membrane.highest.z_mean + frame.membrane.highest.z_std for frame in system], color="grey", alpha = 0.5)
-
-    ax.plot(times, [frame.membrane.lowest.z_mean for frame in system], color = "tan", label = "Lowest membrane point")
-    #ax.plot(times, [frame.membrane.lowest.z_mean + frame.membrane.lowest.z_std for frame in system], color = "tan", linestyle="--", label = "Standard deviation")
-    #ax.plot(times, [frame.membrane.lowest.z_mean - frame.membrane.lowest.z_std for frame in system], color = "tan", linestyle="--")
-
-    ax.fill_between(times, [frame.membrane.lowest.z_mean - frame.membrane.lowest.z_std for frame in system], [frame.membrane.lowest.z_mean + frame.membrane.lowest.z_std for frame in system], color="tan", alpha = 0.5)
-
-    for i in range(system.nb_clusters):
-        ax.plot(times, [frame.clusters[i].center_of_mass[2] for frame in system], label = f"Cluster {i}")
-    
-    ax.legend()
-    
-    fig.savefig(f"{out_prefix}_relative_z_position.svg", format = "svg")
-
-def plot_relative_com(out_prefix, system):
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.set_title(f'"Relative" center of mass of clusters ({ARGS.method} for cluster correspondance)')
-
-    #ax.set_title(f"Absolute center of mass of clusters ({ARGS.method} for cluster correspondance)")
-    #ax.set_xlim(0, system.box_dimension[0])
-    #ax.set_ylim(0, system.box_dimension[1])
-    #ax.set_zlim(0, system.box_dimension[2])
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_zlabel("z")
-
-    for i in range(system.nb_clusters):
-        ax.scatter([frame.clusters[i].x_relative_highest for frame in system], [frame.clusters[i].y_relative_highest for frame in system], [frame.clusters[i].z_relative_highest for frame in system], label =  f"Cluster {i}", depthshade = False, alpha = 0.5, s=10)
-        
-    leg = ax.legend(loc="center left")
-    for lh in leg.legendHandles:
-        lh.set_alpha(1)
-        lh.set_sizes([10])
-    fig.savefig(f"{out_prefix}_relative_com.svg", format = "svg")  
-
-def get_ram(max_ram):
-    while True:
-        ram = psutil.virtual_memory()._asdict()["used"]
-        if ram > max_ram.value:
-            max_ram.value = ram
-        time.sleep(1)
-
-def print_ram(ram):
-    units = ["o", "Ko", "Mo", "Go", "To"]
-    mem = float(ram)
-    unit = 0
-    while mem >= 1024:
-        mem = mem / 1024
-        unit += 1
-    print("MAX_RAM", f"{round(mem,3)} {units[unit]}")
-
+    ARGS.frames = len(UNIVERSE.trajectory) if ARGS.frames == -1 else ARGS.frames
+    ARGS.prefix = ARGS.prefix if ARGS.prefix else ".".join(ARGS.traj.split("/")[-1].split(".")[:-1])
 
 if __name__ == "__main__":
-
-    max_ram = multiprocessing.Manager().Value("i", 0)
-    ram_process =  multiprocessing.Process(target = get_ram, args=(max_ram,))
-    ram_process.start()
-
     ARGS = args_gestion()
 
+    UNIVERSE = mda.Universe(ARGS.topo, ARGS.traj)
+
+    check_arguments()
+
+    logging.info(f'== Molecules aggregate configuration ==\n\
+        trajectory : {ARGS.traj}\n\
+        topology : {ARGS.topo}\n\
+        outputs : {ARGS.outdir}/{ARGS.prefix}_*.svg\n\
+        number of frames to compute : {ARGS.frames}\n\
+        == Clustering\n\
+        clusters molecule : {ARGS.c_mol}\n\
+        clustering threshold : {ARGS.threshold}\n\
+        number of clusters to keep : {ARGS.to_keep}\n\
+        method for clusters correspondance : {ARGS.method}\n\
+        number of cluster to look at for correspondance : {"all" if ARGS.nb_corr == -1 else ARGS.nb_corr}\n\
+        == Membrane\n\
+        membrane molecule : {ARGS.m_mol}\n\
+        membrane slice size : {ARGS.slice_size}\n\
+        membrane slice axis : {ARGS.slice_axis} ({ARGS.slice_axis_idx})\n\
+        membrane highest and lowest point axis : {ARGS.membrane_axis}\n\
+        process for computation : {ARGS.process}')
+
     start = time.time()
+    check_ram.start() #To check RAM usage and abort if it's too high 
 
-    logging.info("Load system...")
+    molecules_aggregate.config.init(UNIVERSE, ARGS) #Create global variable with user arguments
 
-    mda_system = mda.Universe(ARGS.topo, ARGS.traj)
+    computed_trajectory = molecules_aggregate.compute_aggregation() #Compute membranes and clusters through frames
 
-    #This lines are for profiling the time
-    '''pr = cProfile.Profile()
-    pr.enable()'''
+    plot_prefix = ARGS.outdir + "/" + ARGS.prefix
+    plot.clusters_size(plot_prefix, computed_trajectory) #Plot clusters size through time
+    plot.absolute_center_of_mass(plot_prefix, computed_trajectory) #Plot absolute center of mass position of each cluster, in 3d plot
+    #plot.absolute_coord_through_time(plot_prefix, computed_trajectory, "x") #Plot absolute x through time
+    #plot.absolute_coord_through_time(plot_prefix, computed_trajectory, "y") #Plot absolute y through time
+    #plot.absolute_coord_through_time(plot_prefix, computed_trajectory, "z") #Plot absolute z through time
+    #plot.relative_coord_through_time(plot_prefix, computed_trajectory, "x") #Plot clusters x mean through time, and membrane highest and lowest point x mean 
+    #plot.relative_coord_through_time(plot_prefix, computed_trajectory, "y") #Plot clusters y mean through time, and membrane highest and lowest point x mean 
+    plot.relative_coord_through_time(plot_prefix, computed_trajectory, "z") #Plot clusters z mean through time, and x membrane highest and lowest point mean 
 
-    #clusters = molecules_aggregate.load_clusters(system, "TO", ARGS.threshold, ARGS.to_keep, ARGS.frames, ARGS.method, ARGS.nb_corr)
-
-    system = molecules_aggregate.load_system(mda_system, "TO", ARGS.threshold, ARGS.to_keep, "DOPC", 50, ARGS.frames, ARGS.method, ARGS.nb_corr)
-
-    #This lines are for profiling the time
-    '''pr.disable()
-    s = io.StringIO()
-    sortby = SortKey.CUMULATIVE
-    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-    ps.print_stats()
-    print(s.getvalue())'''
-
-    out_path = ARGS.outdir + "/" + ARGS.prefix
-
-    plot_size(out_path, system)
-    plot_com(out_path, system)
-    plot_relative_position(out_path, system)
-    plot_relative_com(out_path, system)
-    #plot_2d(out_path, clusters)
     logging.info(f"Analysis end in {time.time() - start} s")
+    check_ram.stop()
 
-    ram_process.terminate()
-    print_ram(max_ram.value)
 
 
 

@@ -5,3 +5,7 @@ class MoleculeNotFound(Exception):
 class InvalidAxis(Exception):
     """Raised when axis has not valid value"""
     pass
+
+class ArgumentError(Exception):
+    """Raised when error in command line argument"""
+    pass
