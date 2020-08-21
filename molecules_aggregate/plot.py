@@ -89,8 +89,6 @@ def relative_coord_through_time(out_prefix, system, coord):
 
     times = [frame.time for frame in system]
 
-    print([frame.membrane.highest_point[coord]["mean"] for frame in system])
-
     ax.plot(times, [frame.membrane.highest_point[coord]["mean"] for frame in system], color = "grey", label = "Highest membrane point")
     ax.fill_between(times, [frame.membrane.highest_point[coord]["mean"] - frame.membrane.highest_point[coord]["std"] for frame in system], [frame.membrane.highest_point[coord]["mean"] + frame.membrane.highest_point[coord]["std"] for frame in system], color="grey", alpha = 0.5)
 
