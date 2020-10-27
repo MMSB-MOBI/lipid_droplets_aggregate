@@ -1,6 +1,8 @@
 from . import config
 from MDAnalysis.lib import distances
 from typing import List, Dict, Set
+import numpy as np
+import logging
 
 class Cluster:
     def __init__(self, residues, atomgroup, idx = None):
@@ -134,7 +136,7 @@ def make_correspondance_by_position(self, new_clusters_residues, previous_frame,
         for i, dist in enumerate(dist_matrix):
             closest_cluster_idx = np.where(dist == min(dist))[0]
             if len(closest_cluster_idx) > 1:
-                logging.warn(f"Frame {frame_nb}. More than one same center of mass distance for cluster {i} correspondance. Assign the first.")
+                logging.warn(f"Frame {previous_frame.frame + 1}. More than one same center of mass distance for cluster {i} correspondance. Assign the first.")
     
             closest_cluster = tmp_clusters[closest_cluster_idx[0]]
             closest_cluster.idx = i

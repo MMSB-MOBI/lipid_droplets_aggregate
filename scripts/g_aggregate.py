@@ -106,25 +106,27 @@ if __name__ == "__main__":
         membrane highest and lowest point axis : {ARGS.membrane_axis}\n\
         process for computation : {ARGS.process}')
 
+
     start = time.time()
-    check_ram.start() #To check RAM usage and abort if it's too high 
+    #check_ram.start() #To check RAM usage and abort if it's too high 
 
     molecules_aggregate.config.init(UNIVERSE, ARGS) #Create global variable with user arguments
 
-    computed_trajectory = molecules_aggregate.compute_aggregation() #Compute membranes and clusters through frames
+    computed_trajectory = molecules_aggregate.compute_membranes_and_clusters() #Compute membranes and clusters through frames
+    #print(computed_trajectory[0])
 
     plot_prefix = ARGS.outdir + "/" + ARGS.prefix
     plot.clusters_size(plot_prefix, computed_trajectory) #Plot clusters size through time
     plot.absolute_center_of_mass(plot_prefix, computed_trajectory) #Plot absolute center of mass position of each cluster, in 3d plot
-    #plot.absolute_coord_through_time(plot_prefix, computed_trajectory, "x") #Plot absolute x through time
-    #plot.absolute_coord_through_time(plot_prefix, computed_trajectory, "y") #Plot absolute y through time
-    #plot.absolute_coord_through_time(plot_prefix, computed_trajectory, "z") #Plot absolute z through time
+    plot.absolute_coord_through_time(plot_prefix, computed_trajectory, "x") #Plot absolute x through time
+    plot.absolute_coord_through_time(plot_prefix, computed_trajectory, "y") #Plot absolute y through time
+    plot.absolute_coord_through_time(plot_prefix, computed_trajectory, "z") #Plot absolute z through time
+    plot.relative_coord_through_time(plot_prefix, computed_trajectory, "z") #Plot clusters z mean through time, and x membrane highest and lowest point mean 
     #plot.relative_coord_through_time(plot_prefix, computed_trajectory, "x") #Plot clusters x mean through time, and membrane highest and lowest point x mean 
     #plot.relative_coord_through_time(plot_prefix, computed_trajectory, "y") #Plot clusters y mean through time, and membrane highest and lowest point x mean 
-    plot.relative_coord_through_time(plot_prefix, computed_trajectory, "z") #Plot clusters z mean through time, and x membrane highest and lowest point mean 
 
     logging.info(f"Analysis end in {time.time() - start} s")
-    check_ram.stop()
+    #check_ram.stop()
 
 
 

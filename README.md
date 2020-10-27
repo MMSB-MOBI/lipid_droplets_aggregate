@@ -1,9 +1,12 @@
 This module is to recognize and characterize TO molecule clusters in molecular dynamic simulations. 
-It uses MDAnalysis library. 
-
-## Installation
+It uses MDAnalysis library.
 
 Tested with python 3.8. Feel free to give feedback for other python versions. 
+
+
+## Local installation
+
+You can install molecules_aggregate locally. 
 
 Required packages : 
 * MDAnalysis 
@@ -11,12 +14,14 @@ Required packages :
 
 We advice to use conda or venv environment. 
 ``` 
+git clone https://github.com/MMSB-MOBI/molecules_aggregate/
+cd molecules_aggregate
 pip install -r requirements.txt 
 ```
 
 You need to add module to your PYTHONPATH (pip package will come) :
 ```
-export PYTHONPATH=$PYTHONPATH:<this_directory>/src/
+export PYTHONPATH=$PYTHONPATH:<this_directory>
 ```
 
 ## Usage
@@ -73,8 +78,9 @@ You can configure the methods by changing the number of clusters to take into ac
 ## Outputs 
 
 * \<prefix>_size_clusters.svf : Size of largest clusters through time
-* \<prefix>_absolute_com.svg : Position of largest clusters raw center of masses through all frames. 
-* \<prefix>_relative\_<z|x|y>.svg : x|y|z mean coordinates of clusters and highest and lowest point of membrane.
-
+* \<prefix>_absolute_com.svg : Position of largest clusters raw center of masses through all frames.
+* \<prefix>absolute\_<z|x|y>.svg : x|y|z coordinates of clusters through time
+* \<prefix>_relative\_<z|x|y>.svg : x|y|z mean coordinates of clusters and highest and lowest point of membrane through time
+* \<prefix>absolute\_<z|x|y>.svg : x|y|z mean coordinates of clusters and highest and lowest point of membrane through time
 
 
