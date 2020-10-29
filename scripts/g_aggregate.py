@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
 
+
 import argparse
+import os, sys
 import MDAnalysis as mda
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "../"))
 import molecules_aggregate
 from molecules_aggregate import error, plot, serialize
-
 import time
 import logging
 logging.basicConfig(level = logging.INFO, format='%(levelname)s\t%(message)s')
-import cProfile, pstats, io
-from pstats import SortKey
-from mpl_toolkits.mplot3d import Axes3D
-import os
-import multiprocessing, psutil
+import multiprocessing
 from molecules_aggregate.utils import check_ram
-import molecules_aggregate.plot as plot
 
 class CheckFileExistence(argparse.Action):
     def __init__(self, option_strings, dest, nargs=None, **kwargs):
@@ -106,9 +104,8 @@ if __name__ == "__main__":
         membrane highest and lowest point axis : {ARGS.membrane_axis}\n\
         process for computation : {ARGS.process}')
 
-
     start = time.time()
-    #check_ram.start() #To check RAM usage and abort if it's too high 
+    check_ram.start() #To check RAM usage and abort if it's too high 
 
     molecules_aggregate.config.init(UNIVERSE, ARGS) #Create global variable with user arguments
 
@@ -126,7 +123,7 @@ if __name__ == "__main__":
     plot.relative_coord_through_time(plot_prefix, computed_trajectory, ARGS.membrane_axis) #Plot clusters z mean through time, and x membrane highest and lowest point mean 
 
     logging.info(f"Analysis end in {time.time() - start} s")
-    #check_ram.stop()
+    check_ram.stop()
 
 
 
