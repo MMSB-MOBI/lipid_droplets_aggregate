@@ -9,3 +9,7 @@ class InvalidAxis(Exception):
 class ArgumentError(Exception):
     """Raised when error in command line argument"""
     pass
+
+class NotComputedError(Exception):
+    """Raised when something is not computed"""
+    pass

@@ -41,6 +41,12 @@ class TrajectoryIterator:
 
     def __len__(self):
         return len(self.frames)
+
+    @property
+    def nb_clusters(self):
+        if not self.frames[0].clusters:
+            raise error.NotComputedError("No clusters for first frame. Maybe clusters are not computed")
+        return len(self.frames[0].clusters)
     
     def _register_previous(self):
         for i, frame in enumerate(self.frames[1:]): 
