@@ -32,8 +32,8 @@ def clusters_size(out_prefix:str, system):
     
     ax.legend()
     
-    fig.savefig(f"{out_prefix}_size_clusters.svg", format = "svg")
-    logging.info(f"Clusters size saved to {out_prefix}_size_clusters.svg")
+    fig.savefig(f"{out_prefix}_size_clusters.png", format = "png")
+    logging.info(f"Clusters size saved to {out_prefix}_size_clusters.png")
 
 def absolute_center_of_mass(out_prefix:str, system):
     """Plot absolute center of masses of clusters for all frames along x,y and z axis on "3d" plot. 
@@ -59,8 +59,8 @@ def absolute_center_of_mass(out_prefix:str, system):
     for lh in leg.legendHandles:
         lh.set_alpha(1)
         lh.set_sizes([10])
-    fig.savefig(f"{out_prefix}_absolute_com.svg", format="svg")  
-    logging.info(f"Clusters absolute center of mass saved to {out_prefix}_absolute_com.svg")
+    fig.savefig(f"{out_prefix}_absolute_com.png", format="png")  
+    logging.info(f"Clusters absolute center of mass saved to {out_prefix}_absolute_com.png")
 
 def absolute_coord_through_time(out_prefix, system, coord):
     fig, ax = plt.subplots()
@@ -77,8 +77,8 @@ def absolute_coord_through_time(out_prefix, system, coord):
     
     ax.legend()
     
-    fig.savefig(f"{out_prefix}_absolute_{coord}.svg", format = "svg")
-    logging.info(f"Clusters absolute {coord} saved to {out_prefix}_absolute_{coord}.svg")
+    fig.savefig(f"{out_prefix}_absolute_{coord}.png", format = "png")
+    logging.info(f"Clusters absolute {coord} saved to {out_prefix}_absolute_{coord}.png")
 
 def relative_coord_through_time(out_prefix, system, coord):
     fig, ax = plt.subplots()
@@ -100,7 +100,7 @@ def relative_coord_through_time(out_prefix, system, coord):
     
     ax.legend()
     
-    fig.savefig(f"{out_prefix}_relative_{coord}.svg", format = "svg")
-    logging.info(f"Clusters relative {coord} saved to {out_prefix}_relative_{coord}.svg")
+    fig.savefig(f"{out_prefix}_relative_{coord}.png", format = "png")
+    logging.info(f"Clusters relative {coord} saved to {out_prefix}_relative_{coord}.png")
 
     
